@@ -4,6 +4,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from .base_model import BaseModel
+from config import MODEL_CONFIG
 
 class NeuralNetworkModel(BaseModel):
     """深度学习神经网络分类器"""
@@ -11,28 +12,54 @@ class NeuralNetworkModel(BaseModel):
     def __init__(self, input_dim):
         super().__init__("neural_network")
         self.input_dim = input_dim
+        self.nn_params = MODEL_CONFIG["NEURAL_NETWORK_PARAMS"]
         self.model = self._build_model()
     
     def _build_model(self):
         """构建神经网络模型"""
-        model = Sequential([
-            Dense(256, activation='relu', input_shape=(self.input_dim,)),
-            Dropout(0.3),
-            Dense(128, activation='relu'),
-            Dropout(0.3),
-            Dense(64, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
+        layers = []
+        
+        # 构建网络层
+        for i, (units, activation, dropout_rate) in enumerate(
+            zip(self.nn_params["layers"], 
+                self.nn_params["activations"], 
+                self.nn_params["dropout_rates"])
+        ):
+            if i == 0:
+                # 第一层需要指定输入维度
+                layers.append(Dense(units, activation=activation, input_shape=(self.input_dim,)))
+            else:
+                layers.append(Dense(units, activation=activation))
+            
+            # 添加Dropout层（如果dropout_rate > 0）
+            if dropout_rate > 0:
+                layers.append(Dropout(dropout_rate))
+        
+        model = Sequential(layers)
+        
+        # 配置优化器
+        if self.nn_params["optimizer"] == "adam":
+            optimizer = Adam(learning_rate=self.nn_params["learning_rate"])
+        else:
+            optimizer = self.nn_params["optimizer"]
         
         model.compile(
-            optimizer=Adam(learning_rate=0.001),
-            loss='binary_crossentropy',
-            metrics=['accuracy']
+            optimizer=optimizer,
+            loss=self.nn_params["loss"],
+            metrics=self.nn_params["metrics"]
         )
         return model
     
-    def train(self, X_train, y_train, epochs=20, batch_size=64, validation_split=0.2):
+    def train(self, X_train, y_train, epochs=None, batch_size=None, validation_split=None):
         """训练模型"""
+        # 如果参数未提供使用配置中的默认值
+        if epochs is None:
+            epochs = self.nn_params["epochs"]
+        if batch_size is None:
+            batch_size = self.nn_params["batch_size"]
+        if validation_split is None:
+            validation_split = self.nn_params["validation_split"]
+        
         history = self.model.fit(
             X_train, y_train,
             epochs=epochs,

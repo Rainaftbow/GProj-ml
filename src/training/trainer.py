@@ -11,6 +11,7 @@ from src.feature_extraction import batch_extractor
 from src.models.ensemble_model import EnsembleModel
 from src.utils.logger import setup_logging, logger
 from src.training.shap_explainer import ShapExplainer
+from config import MODEL_CONFIG, PATH_CONFIG, DATA_CONFIG, SHAP_CONFIG
 
 def load_and_preprocess_data(features_csv, labels_dir):
     """
@@ -44,8 +45,8 @@ def load_and_preprocess_data(features_csv, labels_dir):
         how="inner"
     )
     
-    # 5. 创建二分类标签（malice阈值0.4）
-    merged_df["is_malicious"] = merged_df["malice"].apply(lambda x: 1 if x > 0.4 else 0)
+    # 5. 创建二分类标签
+    merged_df["is_malicious"] = merged_df["malice"].apply(lambda x: 1 if x > MODEL_CONFIG["TRAINING_DIVIDE_THRESHOLD"] else 0)
     
     # 6. 分离特征和标签
     non_feature_cols = ['file_path', 'file_md5', 'file_sha256', 'hash', 'malice', 'is_malicious']
@@ -77,7 +78,7 @@ def preprocess_data(X, y):
     """
     # 1. 划分训练集和测试集
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y, test_size=DATA_CONFIG["TEST_SIZE"], random_state=DATA_CONFIG["RANDOM_STATE"], stratify=y
     )
     
     # 2. 标准化特征
@@ -86,7 +87,7 @@ def preprocess_data(X, y):
     X_test = scaler.transform(X_test)
     
     # 3. 处理类别不平衡问题（使用SMOTE过采样）
-    smote = SMOTE(random_state=42)
+    smote = SMOTE(random_state=DATA_CONFIG["SMOTE_RANDOM_STATE"])
     X_train, y_train = smote.fit_resample(X_train, y_train)
     
     print(f"训练集: {X_train.shape[0]} 个样本")
@@ -107,26 +108,26 @@ def main(do_shap=False):
     logger.info("开始模型训练流程")
     
     # 创建解释结果保存目录
-    explain_dir = "logs/explanations"
+    explain_dir = PATH_CONFIG["EXPLANATIONS_DIR"]
     os.makedirs(explain_dir, exist_ok=True)
     
     # 1. 特征提取（如果尚未完成）
-    features_csv = "data/features.csv"
+    features_csv = PATH_CONFIG["FEATURES_CSV"]
     if not os.path.exists(features_csv):
         print("特征文件不存在，开始提取特征...")
-        data_dir = "data/DikeDataset-main/files"
+        data_dir = PATH_CONFIG["FILES_DIR"]
         batch_extractor.extract_dataset_features(data_dir, features_csv)
     
     # 2. 加载数据
-    labels_dir = "data/DikeDataset-main/labels"
+    labels_dir = PATH_CONFIG["LABELS_DIR"]
     X, y, merged_df, feature_cols = load_and_preprocess_data(features_csv, labels_dir)
 
     # 3. 数据预处理
     X_train, X_test, y_train, y_test, scaler = preprocess_data(X, y)
 
     #！！！Scaler持久化
-    os.makedirs("models_saved", exist_ok=True)
-    joblib.dump(scaler, "models_saved/scaler.pkl")
+    os.makedirs(PATH_CONFIG["MODELS_SAVED_DIR"], exist_ok=True)
+    joblib.dump(scaler, PATH_CONFIG["SCALER_PATH"])
     # 特征名序列查看
     # with open("models_saved/feature_columns.txt", "w") as f:
     #     f.write("\n".join(feature_cols))
@@ -148,7 +149,7 @@ def main(do_shap=False):
         feature_names = [col for col in merged_df.columns if col not in non_feature_cols]
         
         # 初始化SHAP解释器（使用训练数据子集作为背景数据）
-        background_size = min(100, len(X_train))
+        background_size = min(SHAP_CONFIG["SHAP_BACKGROUND_SIZE"], len(X_train))
         background_indices = random.sample(range(len(X_train)), background_size)
         X_background = X_train[background_indices]
         
@@ -159,7 +160,7 @@ def main(do_shap=False):
         )
         
         # 计算SHAP值（使用测试集子集加快计算）
-        sample_size = min(100, len(X_test))
+        sample_size = min(SHAP_CONFIG["SHAP_SAMPLE_SIZE"], len(X_test))
         sample_indices = random.sample(range(len(X_test)), sample_size)
         X_sample = X_test[sample_indices]
         
@@ -171,27 +172,27 @@ def main(do_shap=False):
         explainer.generate_bar_plot(
             shap_values, 
             save_path=os.path.join(explain_dir, "shap_bar_plot.png"),
-            max_display=20
+            max_display=SHAP_CONFIG["SHAP_MAX_DISPLAY"]
         )
         
         explainer.generate_beeswarm_plot(
             shap_values, 
             save_path=os.path.join(explain_dir, "shap_beeswarm_plot.png"),
-            max_display=20
+            max_display=SHAP_CONFIG["SHAP_MAX_DISPLAY"]
         )
         
         # 为5个样本生成瀑布图
-        for i in range(min(5, sample_size)):
+        for i in range(min(SHAP_CONFIG["SHAP_WATERFALL_SAMPLES"], sample_size)):
             explainer.generate_waterfall_plot(
                 shap_values,
                 index=i,
                 save_path=os.path.join(explain_dir, f"shap_waterfall_sample_{i+1}.png"),
-                max_display=20
+                max_display=SHAP_CONFIG["SHAP_MAX_DISPLAY"]
             )
         
         # 生成特征重要性分析报告
         print("生成特征重要性分析报告...")
-        feature_importance = explainer.analyze_feature_importance(shap_values, top_n=20)
+        feature_importance = explainer.analyze_feature_importance(shap_values, top_n=SHAP_CONFIG["SHAP_MAX_DISPLAY"])
         report_path = os.path.join(explain_dir, "shap_feature_analysis_report.txt")
         explainer.save_analysis_report(feature_importance, report_path)
         

@@ -6,6 +6,7 @@ from .xgboost_model import XGBoostModel
 from .lightgbm_model import LightGBMModel
 from .catboost_model import CatBoostModel
 from .neural_network import NeuralNetworkModel
+from config import MODEL_CONFIG
 
 class EnsembleModel(BaseModel):
     """混合集成学习模型（软投票）"""
@@ -34,7 +35,7 @@ class EnsembleModel(BaseModel):
     def predict(self, X):
         """集成预测（多数投票）"""
         proba = self.predict_proba(X)
-        return (proba > 0.5).astype(int)
+        return (proba > MODEL_CONFIG["TRAINING_PREDICTION_THRESHOLD"]).astype(int)
 
     def predict_proba(self, X):
         """
@@ -44,7 +45,7 @@ class EnsembleModel(BaseModel):
 
         # 模型顺序：RF, XGB, LGBM, CatB, NN
         # 给擅长表格特征的 XGB 和 LGBM 更高的权重
-        weights = [0.15, 0.35, 0.35, 0.1, 0.05]
+        weights = MODEL_CONFIG["ENSEMBLE_WEIGHTS"]
 
         # 权重归一化
         assert abs(sum(weights) - 1.0) < 1e-5, "权重之和必须为 1"

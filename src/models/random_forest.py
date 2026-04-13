@@ -1,12 +1,15 @@
 from .base_model import BaseModel
 from sklearn.ensemble import RandomForestClassifier
+from config import MODEL_CONFIG
 
 class RandomForestModel(BaseModel):
     """随机森林分类器"""
     
     def __init__(self):
         super().__init__("random_forest")
-        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+        # 从配置文件中获取参数
+        rf_params = MODEL_CONFIG["RANDOM_FOREST_PARAMS"]
+        self.model = RandomForestClassifier(**rf_params)
     
     def train(self, X_train, y_train):
         self.model.fit(X_train, y_train)

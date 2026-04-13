@@ -3,6 +3,7 @@ import joblib
 import pandas as pd
 from abc import ABC, abstractmethod
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from config import PATH_CONFIG
 
 class BaseModel(ABC):
     """模板模式基类"""
@@ -10,7 +11,7 @@ class BaseModel(ABC):
     def __init__(self, model_name):
         self.model = None
         self.model_name = model_name
-        self.model_dir = "models_saved"
+        self.model_dir = PATH_CONFIG["MODELS_SAVED_DIR"]
         os.makedirs(self.model_dir, exist_ok=True)
     
     @abstractmethod

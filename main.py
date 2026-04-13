@@ -3,6 +3,7 @@ import uvicorn
 import warnings
 from src.api.app import create_app
 from src.training.trainer import main as train_main
+from config import UVICORN_CONFIG
 
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
@@ -20,7 +21,7 @@ def run_train():
 def run_api():
     """API服务"""
     print("启动API服务...")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=4, proxy_headers=True)
+    uvicorn.run(UVICORN_CONFIG["App"], host=UVICORN_CONFIG["HOST"], port=UVICORN_CONFIG["PORT"], workers=UVICORN_CONFIG["WORKERS"], proxy_headers=UVICORN_CONFIG["PROXY_HEADERS"])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="恶意软件检测系统 - ML模块")

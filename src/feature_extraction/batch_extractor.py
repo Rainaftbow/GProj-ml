@@ -4,6 +4,7 @@ import pefile
 import pandas as pd
 from tqdm import tqdm
 from src.feature_extraction.extractor import FeatureExtractor
+from config import PATH_CONFIG
 
 def extract_dataset_features(data_dir, output_csv, top_50_api_dict=None):
     """
@@ -13,7 +14,7 @@ def extract_dataset_features(data_dir, output_csv, top_50_api_dict=None):
     file_paths = []
     for root, dirs, files in os.walk(data_dir):
         for file in files:
-            if file.endswith(('.exe', '.dll', '.sys')):
+            if file.endswith(PATH_CONFIG["SUPPORTED_EXTENSIONS"]):
                 file_paths.append(os.path.join(root, file))
     
     print(f"找到 {len(file_paths)} 个PE文件，开始特征提取...")
@@ -70,7 +71,7 @@ def generate_top50_api_dict(data_dir, output_path):
     file_paths = []
     for root, dirs, files in os.walk(data_dir):
         for file in files:
-            if file.endswith((".exe", ".dll", ".sys")):
+            if file.endswith(PATH_CONFIG["SUPPORTED_EXTENSIONS"]):
                 file_paths.append(os.path.join(root, file))
 
     print(f"\n扫描 {len(file_paths)} 个文件以生成 高频API 2-gram组合字典...")
@@ -121,9 +122,9 @@ def generate_top50_api_dict(data_dir, output_path):
     return top_50
 
 if __name__ == "__main__":
-    data_dir = r"E:\AAA\GProj\ml\data\DikeDataset-main\files"
-    dict_path = r"E:\AAA\GProj\ml\models_saved\top_50_api_dict.txt"
-    output_path = r"E:\AAA\GProj\ml\data\features.csv"
+    data_dir = PATH_CONFIG["FILES_DIR"]
+    dict_path = PATH_CONFIG["API_DICT_PATH"]
+    output_path = PATH_CONFIG["FEATURES_CSV"]
 
 
     # 针对数据集的高频API组合字典生成

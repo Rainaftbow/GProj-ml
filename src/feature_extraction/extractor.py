@@ -4,6 +4,7 @@ import math
 import os
 import re
 import pefile
+from config import FEATURE_CONFIG
 
 class FeatureExtractor:
     """PE文件特征提取器"""
@@ -78,7 +79,7 @@ class FeatureExtractor:
 
             # 节区特征
             # 检查异常节区名称
-            normal_sections = {b".text", b".data", b".rsrc", b".bss", b".rdata", b".reloc", b".idata"}
+            normal_sections = FEATURE_CONFIG["NORMAL_SECTIONS"]
             features["is_abnormal_section_name"] = int(
                 any(
                     section.Name.rstrip(b"\x00") not in normal_sections
@@ -153,12 +154,11 @@ class FeatureExtractor:
 
 
         # 字符串特征
-        strings = re.findall(b"[ -~]{4,}", self.file_content)
+        pattern = rf"[ -~]{{{FEATURE_CONFIG["NUM_PRINTABLE_STR_LEN"]},}}".encode()
+        strings = re.findall(pattern, self.file_content)
         features["num_printable_strings"] = len(strings)
 
-        suspicious_pattern = re.compile(
-            br"(?i)(cmd\.exe|powershell|http|https|SOFTWARE\\\\|shell|inject)"
-        )
+        suspicious_pattern = re.compile(FEATURE_CONFIG["SUSPICIOUS_PATTERNS"])
         features["suspicious_str_count"] = sum(
             1 for s in strings if suspicious_pattern.search(s)
         )

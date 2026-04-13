@@ -5,6 +5,7 @@ from src.models.ensemble_model import EnsembleModel
 from src.utils.logger import logger
 from pydantic import BaseModel
 from typing import List
+from config import PATH_CONFIG, MODEL_CONFIG
 router = APIRouter()
 
 # 全局变量存储模型和配置
@@ -46,14 +47,14 @@ def load_model():
             ensemble_model.load()
 
             # 加载标准化器 (Scaler)
-            scaler = joblib.load("models_saved/scaler.pkl")
+            scaler = joblib.load(PATH_CONFIG["SCALER_PATH"])
 
             model_loaded = True
             print("推理环境加载成功：模型、Scaler已就绪")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"加载失败: {str(e)}")
 
-@router.get("/health", summary="服务健康检查")
+@router.get("/health", summary="服务状态查询")
 async def health_check():
     """检查API服务状态"""
     return {"status": "alive", "model_loaded": model_loaded}
@@ -83,16 +84,16 @@ async def predict(data: FeatureSchema):
         for i in range(50):
             processed_features[f"api_2gram_{i}"] = data.top_50_api_2gram[i]
 
-        # 2. 转换为 DataFrame
+        # 转换为 DataFrame
         X_df = pd.DataFrame([processed_features])
 
         X_scaled = scaler.transform(X_df)
 
-        # 3. 执行模型推理
+        # 执行模型推理
         proba = ensemble_model.predict_proba(X_scaled)
         score = float(proba[0])
 
-        decision_threshold = 0.7
+        decision_threshold = MODEL_CONFIG["DECISION_THRESHOLD"]
         is_malicious = score >= decision_threshold
 
         logger.info(f"预测完成 - 分数: {score}")
@@ -105,5 +106,5 @@ async def predict(data: FeatureSchema):
         }
 
     except Exception as e:
-        logger.error(f"JSON预测异常: {str(e)}")
+        logger.error(f"预测异常: {str(e)}")
         raise HTTPException(status_code=500, detail=f"预测失败: {str(e)}")
