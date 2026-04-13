@@ -1,11 +1,10 @@
-import os
-import json
+import joblib
 import pandas as pd
-import numpy as np
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, HTTPException
 from src.models.ensemble_model import EnsembleModel
-from src.feature_extraction.extractor import FeatureExtractor
-from src.utils.logger import logger, setup_logging
+from src.utils.logger import logger
+from pydantic import BaseModel
+from typing import List
 router = APIRouter()
 
 # 全局变量存储模型和配置
@@ -13,31 +12,46 @@ ensemble_model = None
 model_loaded = False
 top_50_api_dict = []
 
+# 定义Schema
+class FeatureSchema(BaseModel):
+    file_size: float
+    global_entropy: float
+    e_magic: int
+    machine: int
+    number_of_sections: int
+    time_date_stamp: int
+    address_of_entry_point: int
+    image_base: int
+    section_alignment: int
+    subsystem: int
+    is_abnormal_section_name: int
+    all_sections_size_ratio: float
+    wx_section_ratio: float
+    max_section_entropy: float
+    num_imported_dlls: int
+    is_export_present: int
+    resource_size: int
+    num_printable_strings: int
+    suspicious_str_count: int
+    byte_histogram: List[float]  # 256维
+    top_50_api_2gram: List[float] # 50维
+
+
 def load_model():
-    """加载集成模型和API字典"""
-    global ensemble_model, model_loaded, top_50_api_dict
-    
-    # 确保日志系统已配置
-    if not logger.handlers:
-        setup_logging()
-    
+    global ensemble_model, scaler, feature_columns, model_loaded
     if not model_loaded:
         try:
-            # 加载API字典
-            dict_path = "models_saved/top_50_api_dict.txt"
-            if os.path.exists(dict_path):
-                with open(dict_path, 'r') as f:
-                    top_50_api_dict = [line.strip() for line in f.readlines()]
-            
             # 加载集成模型
             ensemble_model = EnsembleModel()
             ensemble_model.load()
-            
+
+            # 加载标准化器 (Scaler)
+            scaler = joblib.load("models_saved/scaler.pkl")
+
             model_loaded = True
-            logger.info("模型和API字典加载成功")
+            print("推理环境加载成功：模型、Scaler已就绪")
         except Exception as e:
-            logger.error(f"模型加载失败: {str(e)}")
-            raise HTTPException(status_code=500, detail="模型加载失败")
+            raise HTTPException(status_code=500, detail=f"加载失败: {str(e)}")
 
 @router.get("/health", summary="服务健康检查")
 async def health_check():
@@ -45,80 +59,51 @@ async def health_check():
     return {"status": "alive", "model_loaded": model_loaded}
 
 
-@router.post("/predict", summary="执行恶意软件检测")
-async def predict(file: UploadFile = File(...)):
-    """接收PE文件，提取特征并预测恶意概率"""
+@router.post("/predict", summary="执行检测")
+async def predict(data: FeatureSchema):
+    """接收特征JSON，直接进行预测"""
     try:
         if not model_loaded:
             load_model()
 
-        # 上传文件持久化
-        file_path = f"temp/{file.filename}"
-        os.makedirs("temp", exist_ok=True)
-
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
-
-        # 特征提取
-        try:
-            extractor = FeatureExtractor(file_path, top_50_api_dict=top_50_api_dict)
-            features = extractor.extract_all_features()
-        finally:
-            # 临时文件删除
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                logger.warning(f"无法删除临时文件: {str(e)}")
-
+        # 转为 DataFrame
         processed_features = {}
 
-        # 17维基础特征
-        base_features = [
-            "file_size",
-            "global_entropy",
-            "e_magic",
-            "machine",
-            "number_of_sections",
-            "time_date_stamp",
-            "address_of_entry_point",
-            "image_base",
-            "section_alignment",
-            "subsystem",
-            "max_section_entropy",
-            "is_abnormal_section_name",
-            "num_imported_dlls",
-            "is_export_present",
-            "resource_size",
-            "num_printable_strings",
-            "suspicious_str_count",
-        ]
-        for feat in base_features:
-            processed_features[feat] = features[feat]
+        # 提取基础特征
+        base_data = data.model_dump()
+        for field in FeatureSchema.model_fields:
+            if field not in ["byte_histogram", "top_50_api_2gram"]:
+                processed_features[field] = base_data[field]
 
-        # 256维字节直方图
+        # 展开 256 维字节直方图
         for i in range(256):
-            processed_features[f"byte_hist_{i}"] = features[
-                "byte_histogram"
-            ][i]
+            processed_features[f"byte_hist_{i}"] = data.byte_histogram[i]
 
-        # 50维API 2-gram
+        # 展开 50 维 API 2-gram
         for i in range(50):
-            processed_features[f"api_2gram_{i}"] = features[
-                "top_50_api_2gram"
-            ][i]
+            processed_features[f"api_2gram_{i}"] = data.top_50_api_2gram[i]
 
+        # 2. 转换为 DataFrame
         X_df = pd.DataFrame([processed_features])
 
-        # 预测恶意概率
-        proba = ensemble_model.predict_proba(X_df)
+        X_scaled = scaler.transform(X_df)
+
+        # 3. 执行模型推理
+        proba = ensemble_model.predict_proba(X_scaled)
         score = float(proba[0])
-        is_malicious = True if score >= 0.36 else False
+
+        decision_threshold = 0.7
+        is_malicious = score >= decision_threshold
+
+        logger.info(f"预测完成 - 分数: {score}")
 
         return {
-            "file_name": file.filename,
-            "score": score,
-            "is_malicious": is_malicious
+            "success": True,
+            "score": round(score, 4),
+            "is_malicious": is_malicious,
+            "threshold": decision_threshold
         }
+
     except Exception as e:
-        logger.error(f"预测失败: {str(e)}")
+        logger.error(f"JSON预测异常: {str(e)}")
         raise HTTPException(status_code=500, detail=f"预测失败: {str(e)}")

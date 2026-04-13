@@ -1,6 +1,5 @@
 import os
 import joblib
-import numpy as np
 import pandas as pd
 from abc import ABC, abstractmethod
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
@@ -28,7 +27,7 @@ class BaseModel(ABC):
     
     @abstractmethod
     def predict_proba(self, X):
-        """预测概率（用于软投票）"""
+        """软投票预测概率"""
         if hasattr(self.model, 'feature_names_in_') and isinstance(X, pd.DataFrame):
             return self.model.predict_proba(X)
         return self.model.predict_proba(X)

@@ -4,12 +4,10 @@ from .routes import router as api_router
 def create_app():
     """FastAPI应用实例"""
     app = FastAPI(
-        title="恶意软件检测API",
-        description="基于机器学习的恶意软件检测系统API",
-        version="1.0.0"
+        title="ML服务",
+        description="提供根据特征检测的服务",
     )
     
-    # 包含路由
-    app.include_router(api_router)
+    app.include_router(api_router, prefix='/api/ml')
     
     return app

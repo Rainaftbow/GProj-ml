@@ -1,27 +1,26 @@
 # 恶意软件检测系统 - ML模块
 
 ## 描述
-本模块是恶意软件检测系统的机器学习核心，实现以下功能：
-1. 323维特征提取框架
-2. 训练五种基础模型（RF、XGBoost、LightGBM、CatBoost、神经网络）
-3. 使用软投票集成模型进行预测
-4. 基于FastAPI的接口服务
+本模块是恶意软件检测系统的机器学习核心 
+### 325维特征提取框架
+[![peD8RiD.png](https://s41.ax1x.com/2026/04/13/peD8RiD.png)](https://imgchr.com/i/peD8RiD)
+### 采用RF、XGBoost、LightGBM、CatBoost、神经网络，通过软投票实现集成模型
+[![peD8fRH.png](https://s41.ax1x.com/2026/04/13/peD8fRH.png)](https://imgchr.com/i/peD8fRH)
+### 提供基于FastAPI的恶意软件特征检测服务
 
 ## 目录结构
 ```
 ml/
-├── data/                 # 原始数据集
-├── logs/                 # 运行日志
-├── models_saved/         # 已训练模型
+├── models_saved/         # 持久化
 ├── src/
-│   ├── api/              # API接口
-│   ├── feature_extraction/ # 特征提取
+│   ├── api/
+│   ├── feature_extraction/ # 特征提取框架实现
 │   ├── models/           # 模型实现
 │   ├── training/         # 训练实现
-│   └── utils/            # 工具函数
-├── main.py               # 主入口
-├── requirements.txt      # 依赖
-└── README.md             # 说明文档
+│   └── utils/
+├── main.py
+├── requirements.txt
+└── README.md
 ```
 
 ## 安装依赖
@@ -31,10 +30,21 @@ pip install -r requirements.txt
 
 ## 使用说明
 
-### 训练模型
+### 特征提取
+```bash
+python ./src/feature_extraction/batch_extractor.py
+```
+
+### 训练
 ```bash
 python main.py --train
 ```
+
+### SHAP
+```bash
+python ./src/training/trainer.py --shap
+```
+
 
 ### 启动API服务
 ```bash
@@ -42,5 +52,5 @@ python main.py --serve
 ```
 
 ### API接口
-- `GET /health`: 健康检查
-- `POST /predict`: 接收PE文件进行检测
+- `GET /health`: 服务状态检查
+- `POST /predict`: 特征检测

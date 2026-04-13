@@ -6,7 +6,7 @@ import re
 import pefile
 
 class FeatureExtractor:
-    """PE文件特征提取器（与backend完全一致）"""
+    """PE文件特征提取器"""
 
     def __init__(self, file_path, top_50_api_dict=None):
         self.file_path = file_path
@@ -61,7 +61,6 @@ class FeatureExtractor:
             # 文件统计特征
             features["file_size"] = self.file_size
             features["global_entropy"] = self.calculate_entropy(self.file_content)
-            features["byte_histogram"] = self.get_byte_histogram()
 
             # DOS头MZ签名
             features["e_magic"] = pe.DOS_HEADER.e_magic
@@ -77,17 +76,9 @@ class FeatureExtractor:
             features["section_alignment"] = pe.OPTIONAL_HEADER.SectionAlignment
             features["subsystem"] = pe.OPTIONAL_HEADER.Subsystem
 
-            # 5. 节区特征
-            section_entropies = [
-                self.calculate_entropy(section.get_data())
-                for section in pe.sections
-            ]
-            features["max_section_entropy"] = (
-                max(section_entropies) if section_entropies else 0
-            )
-
+            # 节区特征
             # 检查异常节区名称
-            normal_sections = {b".text", b".data", b".rsrc", b".bss"}
+            normal_sections = {b".text", b".data", b".rsrc", b".bss", b".rdata", b".reloc", b".idata"}
             features["is_abnormal_section_name"] = int(
                 any(
                     section.Name.rstrip(b"\x00") not in normal_sections
@@ -95,7 +86,45 @@ class FeatureExtractor:
                 )
             )
 
-            # 6. 导入表特征并收集 API
+            # 所有节区尺寸压缩比
+            # 磁盘总占用 / 内存总占用
+            total_raw_size = 0
+            total_virtual_size = 0
+
+            for section in pe.sections:
+                total_raw_size += section.SizeOfRawData
+                total_virtual_size += section.Misc_VirtualSize
+
+            if total_virtual_size > 0:
+                features["all_sections_size_ratio"] = total_raw_size / total_virtual_size
+            else:
+                features["all_sections_size_ratio"] = 1.0
+
+            # wx节区占比
+            num_sections = len(pe.sections)
+            wx_sections_count = 0
+
+            for section in pe.sections:
+                if (section.Characteristics & 0x80000000) and (section.Characteristics & 0x20000000):
+                    wx_sections_count += 1
+
+            features["wx_section_ratio"] = wx_sections_count / num_sections if num_sections > 0 else 0
+
+            # 最高信息熵节区
+            section_entropies = []
+            for section in pe.sections:
+                # 伪造巨大节区尺寸崩溃预防
+                try:
+                    data = section.get_data()
+                    if data:
+                        section_entropies.append(self.calculate_entropy(data))
+                except:
+                    continue
+            features["max_section_entropy"] = (
+                max(section_entropies) if section_entropies else 0
+            )
+
+            # 导入表特征并收集 API
             api_list = []
             if hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
                 features["num_imported_dlls"] = len(pe.DIRECTORY_ENTRY_IMPORT)
@@ -134,22 +163,20 @@ class FeatureExtractor:
             1 for s in strings if suspicious_pattern.search(s)
         )
 
+        # 字节直方图
+        features["byte_histogram"] = self.get_byte_histogram()
+
         # API组合特征，2-gram 对齐映射
         api_2gram_feature = [0.0] * 50
-        if len(api_list) >= 2:
-            file_2grams = [
-                f"{api_list[i]}_{api_list[i + 1]}"
-                for i in range(len(api_list) - 1)
-            ]
+        if len(api_list) >= 2 and self.top_50_api_dict:
+            file_2grams = [f"{api_list[i]}_{api_list[i + 1]}" for i in range(len(api_list) - 1)]
             total_file_grams = len(file_2grams)
-
-            if self.top_50_api_dict:
+            if total_file_grams > 0:
+                file_gram_counts = Counter(file_2grams)
                 for idx, target_gram in enumerate(self.top_50_api_dict):
-                    count = file_2grams.count(target_gram)
-                    api_2gram_feature[idx] = count / total_file_grams
+                    api_2gram_feature[idx] = file_gram_counts.get(target_gram, 0) / total_file_grams
 
         features["top_50_api_2gram"] = api_2gram_feature
-
         return features
 
     def extract_all_features(self):

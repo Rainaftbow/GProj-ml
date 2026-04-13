@@ -6,7 +6,6 @@ from src.training.trainer import main as train_main
 
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
-# FastAPI应用
 app = create_app()
 
 def run_train():
@@ -21,7 +20,7 @@ def run_train():
 def run_api():
     """API服务"""
     print("启动API服务...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=4, proxy_headers=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="恶意软件检测系统 - ML模块")

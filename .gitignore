@@ -1,6 +1,6 @@
 .idea
 .venv
-temp
 catboost_info
 data
-*.log
+logs
+models_saved/feature_columns.txt

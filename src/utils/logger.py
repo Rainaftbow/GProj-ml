@@ -2,7 +2,7 @@ import logging
 import os
 from datetime import datetime
 
-# 创建全局 logger 实例
+# 全局 logger 实例
 logger = logging.getLogger("ml_module")
 
 def setup_logging(log_dir="logs", log_level=logging.INFO):
