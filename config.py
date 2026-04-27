@@ -13,9 +13,9 @@ UVICORN_CONFIG = {
     "App": "main:app",
     "HOST": "0.0.0.0",
     "PORT": 8000,
-    "WORKERS": 4,
+    "WORKERS": None,
     "PROXY_HEADERS": True,
-    "API_PREFIX": "/api/ml",
+    "API_PREFIX": "/api/v1",
 }
 
 # ==================== 预测配置 ====================

@@ -1,16 +1,14 @@
-import joblib
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from src.models.ensemble_model import EnsembleModel
 from src.utils.logger import logger
 from pydantic import BaseModel
 from typing import List
-from config import PATH_CONFIG, MODEL_CONFIG
+from config import MODEL_CONFIG
+from src.utils import model_loader
 router = APIRouter()
 
 # 全局变量存储模型和配置
 ensemble_model = None
-model_loaded = False
 top_50_api_dict = []
 
 # 定义Schema
@@ -37,42 +35,27 @@ class FeatureSchema(BaseModel):
     byte_histogram: List[float]  # 256维
     top_50_api_2gram: List[float] # 50维
 
-
-def load_model():
-    global ensemble_model, scaler, feature_columns, model_loaded
-    if not model_loaded:
-        try:
-            # 加载集成模型
-            ensemble_model = EnsembleModel()
-            ensemble_model.load()
-
-            # 加载标准化器 (Scaler)
-            scaler = joblib.load(PATH_CONFIG["SCALER_PATH"])
-
-            model_loaded = True
-            print("推理环境加载成功：模型、Scaler已就绪")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"加载失败: {str(e)}")
-
 @router.get("/health", summary="服务状态查询")
-async def health_check():
+def health_check():
+    components = [
+        model_loader.ensemble_model,
+        model_loader.scaler
+    ]
+    loaded_status = all(c is not None for c in components)
     """检查API服务状态"""
-    return {"status": "alive", "model_loaded": model_loaded}
+    return {"status": "alive", "model_loaded": loaded_status}
 
 
 @router.post("/predict", summary="执行检测")
-async def predict(data: FeatureSchema):
+def predict(data: FeatureSchema):
     """接收特征JSON，直接进行预测"""
     try:
-        if not model_loaded:
-            load_model()
-
         # 转为 DataFrame
         processed_features = {}
 
         # 提取基础特征
         base_data = data.model_dump()
-        for field in FeatureSchema.model_fields:
+        for field in data.model_fields:
             if field not in ["byte_histogram", "top_50_api_2gram"]:
                 processed_features[field] = base_data[field]
 
@@ -87,10 +70,10 @@ async def predict(data: FeatureSchema):
         # 转换为 DataFrame
         X_df = pd.DataFrame([processed_features])
 
-        X_scaled = scaler.transform(X_df)
+        X_scaled = model_loader.scaler.transform(X_df)
 
         # 执行模型推理
-        proba = ensemble_model.predict_proba(X_scaled)
+        proba = model_loader.ensemble_model.predict_proba(X_scaled)
         score = float(proba[0])
 
         decision_threshold = MODEL_CONFIG["DECISION_THRESHOLD"]
